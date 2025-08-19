@@ -1,0 +1,5 @@
+{
+  "name": "JengaTiktok Agent",
+  "description": "An AI agent that autonomously creates and posts content to TikTok based on user instructions.",
+  "requestFramePermissions": []
+}
