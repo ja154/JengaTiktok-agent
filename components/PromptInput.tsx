@@ -6,10 +6,10 @@ interface PromptInputProps {
   setInstruction: (value: string) => void;
   onExecute: () => void;
   isRunning: boolean;
-  isTikTokConnected: boolean;
+  isApiKeySet: boolean;
 }
 
-const PromptInput: React.FC<PromptInputProps> = ({ instruction, setInstruction, onExecute, isRunning, isTikTokConnected }) => {
+const PromptInput: React.FC<PromptInputProps> = ({ instruction, setInstruction, onExecute, isRunning, isApiKeySet }) => {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -36,14 +36,14 @@ const PromptInput: React.FC<PromptInputProps> = ({ instruction, setInstruction, 
         </div>
         <button
           onClick={onExecute}
-          disabled={isRunning || !instruction.trim() || !isTikTokConnected}
+          disabled={isRunning || !instruction.trim() || !isApiKeySet}
           className="mt-4 w-full flex items-center justify-center bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 transform hover:scale-105 disabled:scale-100"
         >
           {isRunning ? <Spinner /> : 'Execute Task'}
         </button>
-        {!isTikTokConnected && (
+        {!isApiKeySet && (
             <p className="text-center text-yellow-400 text-sm mt-3">
-                Please connect your TikTok account to enable the agent.
+                Please provide your TikTok API key to enable the agent.
             </p>
         )}
     </div>
