@@ -1,63 +1,90 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header';
-import PromptInput from './components/PromptInput';
-import AgentStatusDisplay from './components/ImageDisplay';
+import Scheduler from './components/PromptInput';
+import PostList from './components/ImageDisplay';
 import TikTokConnect from './components/TikTokConnect';
 import * as agentService from './services/geminiService';
+import { Post } from './types';
 
-export type GenerationType = 'image' | 'video';
-
-export interface AgentResult {
-  mediaUrl: string;
-  mediaType: GenerationType;
-  caption: string;
-  detailedPrompt: string;
-}
 
 const App: React.FC = () => {
-  const [instruction, setInstruction] = useState<string>('');
   const [tikTokApiKey, setTikTokApiKey] = useState<string>('');
-  const [logs, setLogs] = useState<string[]>([]);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isScheduling, setIsScheduling] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AgentResult | null>(null);
+  const schedulerIntervalRef = useRef<number | null>(null);
   
-  const handleExecuteTask = useCallback(async () => {
-    if (!instruction.trim() || isRunning || !tikTokApiKey.trim()) return;
-
-    setIsRunning(true);
-    setError(null);
-    setResult(null);
-    setLogs([]);
-
+  const fetchPosts = useCallback(async () => {
     try {
-      const stream = agentService.executeAutonomousAgent(instruction, tikTokApiKey);
-
-      for await (const event of stream) {
-        switch (event.type) {
-          case 'log':
-            setLogs(prev => [...prev, event.message]);
-            break;
-          case 'result':
-            setResult(event.payload);
-            setLogs(prev => [...prev, '✅ Agent task finished!']);
-            break;
-          case 'error':
-            const errorMessage = `Task failed: ${event.message}`;
-            setError(errorMessage);
-            setLogs(prev => [...prev, `✖ ${errorMessage}`]);
-            break;
-        }
+      const fetchedPosts = await agentService.getPosts();
+      setPosts(fetchedPosts);
+      setError(null); // Clear error on successful fetch
+    } catch (err) {
+      console.error("Failed to fetch posts from local storage:", err);
+      setError("Could not retrieve post schedule. There might be an issue with your browser's storage.");
+    }
+  }, []);
+  
+  const runScheduler = useCallback(async () => {
+    console.log('[App] Running post processing check...');
+    try {
+      const postsWereUpdated = await agentService.processDuePosts();
+      if (postsWereUpdated) {
+        console.log('[App] Posts were updated, refreshing list.');
+        await fetchPosts(); // Refresh UI if any post was processed
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred during the streaming connection.';
-      setError(`Connection failed: ${errorMessage}`);
-      setLogs(prev => [...prev, `✖ Connection failed. ${errorMessage}`]);
-    } finally {
-      setIsRunning(false);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      console.error("Scheduler failed:", err);
+      setError(`An error occurred while processing scheduled posts: ${errorMessage}`);
+      if (schedulerIntervalRef.current) {
+        clearInterval(schedulerIntervalRef.current);
+      }
     }
-  }, [instruction, isRunning, tikTokApiKey]);
+  }, [fetchPosts]);
+
+  useEffect(() => {
+    fetchPosts(); // Initial fetch
+    
+    // Run the scheduler immediately, then every 10 seconds
+    runScheduler();
+    schedulerIntervalRef.current = window.setInterval(runScheduler, 10000); 
+    
+    // Listen for changes in other tabs to keep UI in sync
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'jengaTiktokScheduledPosts') {
+        fetchPosts();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      if (schedulerIntervalRef.current) {
+        clearInterval(schedulerIntervalRef.current);
+      }
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [fetchPosts, runScheduler]);
   
+  const handleSchedulePost = async (file: File, scheduleDate: string) => {
+    if (!tikTokApiKey.trim()) {
+      setError("Please provide your TikTok API key before scheduling.");
+      return;
+    }
+    setIsScheduling(true);
+    setError(null);
+
+    try {
+      await agentService.schedulePost(file, scheduleDate, tikTokApiKey);
+      await fetchPosts(); // Refresh the list immediately after scheduling
+    } catch (err) {
+       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+       setError(`Failed to schedule post: ${errorMessage}`);
+    } finally {
+        setIsScheduling(false);
+    }
+  };
+
   return (
     <div className="bg-slate-900 min-h-screen text-slate-100 font-sans">
       <Header />
@@ -67,19 +94,18 @@ const App: React.FC = () => {
             apiKey={tikTokApiKey}
             setApiKey={setTikTokApiKey}
           />
-          <PromptInput
-            instruction={instruction}
-            setInstruction={setInstruction}
-            onExecute={handleExecuteTask}
-            isRunning={isRunning}
+          <Scheduler 
+            onSchedule={handleSchedulePost}
             isApiKeySet={tikTokApiKey.trim() !== ''}
+            isScheduling={isScheduling}
           />
-          <AgentStatusDisplay
-            logs={logs}
-            isRunning={isRunning}
-            error={error}
-            result={result}
-          />
+          <PostList posts={posts} />
+          {error && (
+            <div className="fixed bottom-4 right-4 bg-red-800/90 border border-red-600 text-white p-4 rounded-lg shadow-lg max-w-sm">
+                <p className="font-bold">Error</p>
+                <p>{error}</p>
+            </div>
+          )}
         </div>
       </main>
     </div>

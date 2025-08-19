@@ -8,7 +8,7 @@ const Header: React.FC = () => {
           JengaTiktok Agent
         </h1>
         <p className="text-slate-400 max-w-2xl mx-auto">
-          Your autonomous AI assistant for creating and posting viral TikTok content. Just give it an instruction and watch it work.
+          Your autonomous AI assistant for scheduling content. Upload your media, set a time, and the agent handles the rest—including writing the perfect caption.
         </p>
       </div>
     </header>
